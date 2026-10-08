@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from dotenv import dotenv_values, set_key
 from cryptography.fernet import Fernet
+from dotenv import dotenv_values, set_key
 from werkzeug.security import generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,7 +40,7 @@ def load_env() -> dict[str, str]:
     values = dotenv_values(str(ENV_PATH))
     cleaned: dict[str, str] = {}
     for key, value in values.items():
-        if key and value is not None:
+        if key is not None and value is not None:
             cleaned[key] = str(value)
     return cleaned
 
@@ -49,23 +49,18 @@ def write_env(data: dict[str, Any]) -> None:
     env = load_env()
     env.update({str(key): str(value) for key, value in data.items() if value is not None})
     for key, value in env.items():
-        set_key(str(ENV_PATH), key, value)
+        set_key(str(ENV_PATH), key, str(value))
 
 
 def get_setting(key: str, default: str = "") -> str:
-    return str(load_env().get(key, default) or default)
+    raw = load_env().get(key, default)
+    if raw is None:
+        return str(default)
+    return str(raw).strip()
 
 
 def set_setting(key: str, value: Any) -> None:
     write_env({key: value})
-
-
-def ensure_initial_password() -> None:
-    if get_setting("APP_PASSWORD_HASH"):
-        return
-    default_hash = generate_password_hash("admin123")
-    set_setting("APP_PASSWORD_HASH", default_hash)
-    set_setting("APP_SECRET_KEY", Fernet.generate_key().decode("utf-8"))
 
 
 def get_fernet_key() -> str:
@@ -74,6 +69,28 @@ def get_fernet_key() -> str:
         key = Fernet.generate_key().decode("utf-8")
         set_setting("APP_ENCRYPTION_KEY", key)
     return key
+
+
+def encrypt_secret(value: str) -> str:
+    if not value:
+        return ""
+    fernet = Fernet(get_fernet_key().encode("utf-8"))
+    return fernet.encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_secret(value: str) -> str:
+    if not value:
+        return ""
+    fernet = Fernet(get_fernet_key().encode("utf-8"))
+    return fernet.decrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def ensure_initial_password() -> None:
+    if get_setting("APP_PASSWORD_HASH"):
+        return
+    set_setting("APP_PASSWORD_HASH", generate_password_hash("admin123"))
+    set_setting("APP_SECRET_KEY", Fernet.generate_key().decode("utf-8"))
+    set_setting("APP_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8"))
 
 
 def get_default_category() -> str:

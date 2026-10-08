@@ -16,10 +16,10 @@ from key_rotator import GroqKeyRotator
 
 CATEGORY_DEFINITIONS = {
     "Tabletop Miniatures & D&D Figurines": {
-        "prompt": "Create a clean, robust tabletop miniature/fantasy figurine with a strong silhouette, reasonable wall thickness, and no fragile thin details.",
+        "prompt": "Create a clean, robust tabletop miniature or fantasy figurine with a strong silhouette, reasonable wall thickness, and no fragile details.",
     },
     "Articulated Print-in-Place Toys": {
-        "prompt": "Design a print-in-place articulated creature or toy with working joints, safe clearance, and durable movement geometry.",
+        "prompt": "Design a print-in-place articulated creature or toy with working joints, safe clearance, and durable motion geometry.",
     },
     "Home Organizers & Office Accessories": {
         "prompt": "Design a compact functional organizer or desk accessory with ergonomic proportions and reliable support strength.",
@@ -28,7 +28,7 @@ CATEGORY_DEFINITIONS = {
         "prompt": "Create a high-precision jewelry casting mold with sprues, clean draft angles, and printable mold geometry.",
     },
     "Dental & Medical Models": {
-        "prompt": "Design a precise dental or medical model with consistent wall thickness, safe tolerances, and realistic anatomical geometry.",
+        "prompt": "Design a precise dental or medical model with consistent wall thickness, safe tolerances, and realistic anatomy.",
     },
     "Classic Car Parts & Discontinued Machinery Spares": {
         "prompt": "Create a replacement or bracket part for classic machinery with realistic fit, strength, and stable geometry.",
@@ -98,10 +98,13 @@ class STLGenerator:
 
     def compile_openscad(self, code: str, output_path: Path) -> bool:
         try:
-            result = subprocess.run(["openscad", "-o", str(output_path), "-"], input=code, capture_output=True, text=True, timeout=120)
-            if result.returncode != 0:
-                return False
-            return output_path.exists() and output_path.stat().st_size > 0
+            with tempfile.TemporaryDirectory(prefix="openscad_") as tmpdir:
+                source_path = Path(tmpdir) / "model.scad"
+                source_path.write_text(code, encoding="utf-8")
+                result = subprocess.run(["openscad", "-o", str(output_path), str(source_path)], capture_output=True, text=True, timeout=120)
+                if result.returncode != 0:
+                    return False
+                return output_path.exists() and output_path.stat().st_size > 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 

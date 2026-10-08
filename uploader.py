@@ -19,10 +19,12 @@ def configure_logging() -> logging.Logger:
     logger.setLevel(logging.INFO)
     if logger.handlers:
         return logger
+
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
@@ -54,7 +56,7 @@ class STLFactoryScheduler:
                 self.logger.info("Completed generation: %s", result.get("file_path"))
                 if self.notifier.is_configured():
                     self.notifier.send_stl_success(result)
-            except Exception as exc:  # pragma: no cover - scheduler resilience
+            except Exception as exc:
                 self.logger.exception("Generation failed for %s: %s", category, exc)
                 results.append({"category": category, "status": "failed", "error": str(exc)})
         return {"category": category, "items": results, "count": len(results)}
@@ -62,6 +64,7 @@ class STLFactoryScheduler:
     def start(self) -> None:
         if self._running:
             return
+
         interval_seconds = int(get_setting("SCHEDULER_INTERVAL_SECONDS", "10800"))
         self.scheduler.add_job(
             func=self.run_one_job,
@@ -85,5 +88,6 @@ if __name__ == "__main__":
     scheduler = STLFactoryScheduler()
     scheduler.start()
     import time
+
     while True:
         time.sleep(1)

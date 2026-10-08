@@ -34,22 +34,24 @@ class TelegramNotifier:
     def send_stl_success(self, result: dict[str, Any]) -> bool:
         if not self.is_configured():
             return False
+
         file_path = Path(result.get("file_path", ""))
         caption = (
-            f"<b>STL generated</b>\n"
+            "<b>STL generated</b>\n"
             f"Title: {result.get('title', 'N/A')}\n"
             f"Category: {result.get('category', 'N/A')}\n"
             f"File: {file_path.name if file_path.name else 'n/a'}"
         )
+
         if not file_path.exists():
             return self.send_text(caption)
 
         try:
-            with open(file_path, "rb") as f:
+            with open(file_path, "rb") as stream:
                 response = requests.post(
                     f"https://api.telegram.org/bot{self.token}/sendDocument",
                     data={"chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML"},
-                    files={"document": (file_path.name, f, "application/octet-stream")},
+                    files={"document": (file_path.name, stream, "application/octet-stream")},
                     timeout=60,
                 )
             return response.status_code == 200
@@ -74,6 +76,7 @@ class GoogleDriveArchiver:
                 scopes=["https://www.googleapis.com/auth/drive"],
             )
             service = build("drive", "v3", credentials=credentials)
+
             folder_name = category.replace("/", "_").replace(" ", "_")
             folder_metadata = {
                 "name": folder_name,
