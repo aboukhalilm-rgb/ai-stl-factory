@@ -1,0 +1,32 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Logs and generated artifacts
+logs/*.log
+generated/
+exports/
+
+# Credentials
+credentials/*.json
+credentials/*.pem
+credentials/*.key
+
+# OS files
+.DS_Store
+Thumbs.db

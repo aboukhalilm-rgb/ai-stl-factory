@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+import base64
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import requests
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+from config import BASE_DIR, EXPORTS_DIR, GENERATED_DIR, get_setting, get_service_account_path
+
+
+class TelegramNotifier:
+    def __init__(self) -> None:
+        self.token = get_setting("TELEGRAM_BOT_TOKEN", "")
+        self.chat_id = get_setting("TELEGRAM_CHAT_ID", "")
+
+    def is_configured(self) -> bool:
+        return bool(self.token and self.chat_id)
+
+    def send_text(self, message: str) -> bool:
+        if not self.is_configured():
+            return False
+        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+        payload = {"chat_id": self.chat_id, "text": message, "parse_mode": "HTML"}
+        try:
+            response = requests.post(url, json=payload, timeout=30)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def send_stl_success(self, model_result: dict[str, Any]) -> bool:
+        if not self.is_configured():
+            return False
+        file_path = Path(model_result.get("file_path", ""))
+        if not file_path.exists():
+            return self.send_text(f"<b>STL generated</b>\n{model_result.get('title', 'Model')}\n{model_result.get('category', 'Unknown')}")
+
+        caption = (
+            f"<b>STL generated</b>\n"
+            f"Title: {model_result.get('title', 'N/A')}\n"
+            f"Category: {model_result.get('category', 'N/A')}\n"
+            f"File: {file_path.name}"
+        )
+        url = f"https://api.telegram.org/bot{self.token}/sendDocument"
+        try:
+            with open(file_path, "rb") as f:
+                response = requests.post(
+                    url,
+                    data={"chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML"},
+                    files={"document": (file_path.name, f, "application/sla")},
+                    timeout=60,
+                )
+            return response.status_code == 200
+        except Exception:
+            return False
+
+
+class GoogleDriveArchiver:
+    def __init__(self) -> None:
+        self.folder_id = get_setting("GOOGLE_DRIVE_FOLDER_ID", "")
+        self.service_account_file = get_service_account_path()
+
+    def is_configured(self) -> bool:
+        return bool(self.folder_id and self.service_account_file and self.service_account_file.exists())
+
+    def upload_stl(self, file_path: str, category: str) -> str | None:
+        if not self.is_configured():
+            return None
+        try:
+            credentials = service_account.Credentials.from_service_account_file(
+                str(self.service_account_file),
+                scopes=["https://www.googleapis.com/auth/drive"],
+            )
+            service = build("drive", "v3", credentials=credentials)
+            now = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            folder_name = category.replace("/", "_").replace(" ", "_")
+            folder_metadata = {
+                "name": folder_name,
+                "mimeType": "application/vnd.google-apps.folder",
+                "parents": [self.folder_id],
+            }
+
+            try:
+                folder = service.files().create(body=folder_metadata, fields="id").execute()
+                destination_folder = folder.get("id")
+            except Exception:
+                destination_folder = self.folder_id
+
+            file = Path(file_path)
+            media = MediaFileUpload(str(file), mimetype="application/octet-stream", resumable=True)
+            file_metadata = {
+                "name": f"{file.stem}_{now}.stl",
+                "parents": [destination_folder],
+            }
+            uploaded = service.files().create(body=file_metadata, media_body=media, fields="id,webViewLink").execute()
+            return uploaded.get("webViewLink")
+        except Exception:
+            return None
+
+
+if __name__ == "__main__":
+    notifier = TelegramNotifier()
+    print("Telegram configured:", notifier.is_configured())
+    drive = GoogleDriveArchiver()
+    print("Google Drive configured:", drive.is_configured())
