@@ -2,9 +2,12 @@ Flask==3.1.0
 python-dotenv==1.0.1
 requests==2.32.2
 APScheduler==3.10.1
-cryptography==42.0.8
 trimesh==4.4.9
 numpy==2.1.2
+cadquery==2.4.0
+build123d==0.8.0
+cryptography==42.0.8
 google-api-python-client==2.146.0
 google-auth==2.35.0
 google-auth-httplib2==0.2.0
+werkzeug==3.0.3

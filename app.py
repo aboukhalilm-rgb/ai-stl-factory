@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import base64
-import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,7 +9,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-from config import BASE_DIR, EXPORTS_DIR, GENERATED_DIR, get_setting, get_service_account_path
+from config import get_service_account_path, get_setting
 
 
 class TelegramNotifier:
@@ -31,33 +28,32 @@ class TelegramNotifier:
         try:
             response = requests.post(url, json=payload, timeout=30)
             return response.status_code == 200
-        except Exception:
+        except requests.RequestException:
             return False
 
-    def send_stl_success(self, model_result: dict[str, Any]) -> bool:
+    def send_stl_success(self, result: dict[str, Any]) -> bool:
         if not self.is_configured():
             return False
-        file_path = Path(model_result.get("file_path", ""))
-        if not file_path.exists():
-            return self.send_text(f"<b>STL generated</b>\n{model_result.get('title', 'Model')}\n{model_result.get('category', 'Unknown')}")
-
+        file_path = Path(result.get("file_path", ""))
         caption = (
             f"<b>STL generated</b>\n"
-            f"Title: {model_result.get('title', 'N/A')}\n"
-            f"Category: {model_result.get('category', 'N/A')}\n"
-            f"File: {file_path.name}"
+            f"Title: {result.get('title', 'N/A')}\n"
+            f"Category: {result.get('category', 'N/A')}\n"
+            f"File: {file_path.name if file_path.name else 'n/a'}"
         )
-        url = f"https://api.telegram.org/bot{self.token}/sendDocument"
+        if not file_path.exists():
+            return self.send_text(caption)
+
         try:
             with open(file_path, "rb") as f:
                 response = requests.post(
-                    url,
+                    f"https://api.telegram.org/bot{self.token}/sendDocument",
                     data={"chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML"},
-                    files={"document": (file_path.name, f, "application/sla")},
+                    files={"document": (file_path.name, f, "application/octet-stream")},
                     timeout=60,
                 )
             return response.status_code == 200
-        except Exception:
+        except requests.RequestException:
             return False
 
 
@@ -78,24 +74,23 @@ class GoogleDriveArchiver:
                 scopes=["https://www.googleapis.com/auth/drive"],
             )
             service = build("drive", "v3", credentials=credentials)
-            now = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             folder_name = category.replace("/", "_").replace(" ", "_")
             folder_metadata = {
                 "name": folder_name,
                 "mimeType": "application/vnd.google-apps.folder",
                 "parents": [self.folder_id],
             }
-
             try:
                 folder = service.files().create(body=folder_metadata, fields="id").execute()
                 destination_folder = folder.get("id")
             except Exception:
                 destination_folder = self.folder_id
 
-            file = Path(file_path)
-            media = MediaFileUpload(str(file), mimetype="application/octet-stream", resumable=True)
+            file_obj = Path(file_path)
+            media = MediaFileUpload(str(file_obj), mimetype="application/octet-stream", resumable=True)
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             file_metadata = {
-                "name": f"{file.stem}_{now}.stl",
+                "name": f"{file_obj.stem}_{timestamp}.stl",
                 "parents": [destination_folder],
             }
             uploaded = service.files().create(body=file_metadata, media_body=media, fields="id,webViewLink").execute()
